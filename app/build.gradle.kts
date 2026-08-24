@@ -61,5 +61,11 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
+    // DataStore (user name preference)
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // Material icons (settings gear, edit/delete, etc.)
+    implementation("androidx.compose.material:material-icons-extended")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

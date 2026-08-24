@@ -111,11 +111,11 @@ private fun DayCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Intensity scales up to 8h/day; capped so one long day doesn't blow out the scale.
-    val intensity = (hours / 8f).coerceIn(0f, 1f)
-    val base = MaterialTheme.colorScheme.primary
+    // 0h = no fill, 10h+ = brightest green. Capped at 10h so nothing overshoots the scale.
+    val intensity = (hours / 10f).coerceIn(0f, 1f)
+    val green = com.pias.studytracker.ui.NeonGreen
     val bgColor = if (hours > 0f) {
-        base.copy(alpha = 0.15f + intensity * 0.65f)
+        green.copy(alpha = 0.12f + intensity * 0.80f)
     } else {
         Color.Transparent
     }

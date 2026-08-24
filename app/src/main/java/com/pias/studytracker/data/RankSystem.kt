@@ -3,7 +3,7 @@ package com.pias.studytracker.data
 import kotlin.math.floor
 
 data class RankInfo(
-    val level: Int,          // how many 0.5h blocks completed TODAY (1 per block)
+    val level: Int,
     val tierName: String,
     val hoursIntoTier: Float,
     val tierSpanHours: Float,
@@ -12,18 +12,17 @@ data class RankInfo(
 )
 
 /**
- * Bug-bounty themed rank tiers — this is a DAILY rank, recalculated fresh from
- * that day's hours only (not cumulative across the app's lifetime). Every 0.5h
- * studied that day is one "level"; tiers group levels into named ranks.
- * The separate lifetime "ultimate average" stat lives in StudyRepository, not here.
- * Tune the TIERS list any time — nothing else depends on the values.
+ * Rank ladder logic. Tiers are now USER-EDITABLE (stored in Room via RankTier/RankTierDao) —
+ * this object no longer hardcodes them, it just evaluates whatever list it's given.
+ * DEFAULT_TIERS below is only the seed data used on first install and the
+ * "Reset to default" action in Settings.
  */
 object RankSystem {
 
-    private const val HOURS_PER_LEVEL = 0.5f
+    const val HOURS_PER_LEVEL = 0.5f
 
-    // Scaled for a single day (realistic range ~0-12h), not a lifetime total.
-    private val TIERS = listOf(
+    // Bug-bounty themed defaults. 8h is a fixed milestone: studying 8h/day = Elite Hunter.
+    val DEFAULT_TIERS: List<Pair<Float, String>> = listOf(
         0f to "Script Kiddie",
         1f to "Recon Rookie",
         2f to "Bug Hunter",
@@ -31,22 +30,27 @@ object RankSystem {
         4f to "Exploit Developer",
         5f to "Red Teamer",
         6f to "Security Researcher",
-        7f to "Elite Hunter",
-        8.5f to "Bounty Legend",
+        8f to "Elite Hunter",
+        9f to "Bounty Legend",
         10f to "Grandmaster Hacker"
     )
 
-    fun rankFor(totalHours: Float): RankInfo {
+    fun rankFor(totalHours: Float, tiers: List<Pair<Float, String>> = DEFAULT_TIERS): RankInfo {
+        val sortedTiers = tiers.sortedBy { it.first }
+        if (sortedTiers.isEmpty()) {
+            return RankInfo(0, "Unranked", 0f, HOURS_PER_LEVEL, 0f, HOURS_PER_LEVEL)
+        }
+
         val safeHours = totalHours.coerceAtLeast(0f)
         val level = floor(safeHours / HOURS_PER_LEVEL).toInt()
 
         var tierIndex = 0
-        for (i in TIERS.indices) {
-            if (safeHours >= TIERS[i].first) tierIndex = i else break
+        for (i in sortedTiers.indices) {
+            if (safeHours >= sortedTiers[i].first) tierIndex = i else break
         }
-        val tierStart = TIERS[tierIndex].first
-        val tierName = TIERS[tierIndex].second
-        val tierEnd = if (tierIndex + 1 < TIERS.size) TIERS[tierIndex + 1].first else tierStart + 2f
+        val tierStart = sortedTiers[tierIndex].first
+        val tierName = sortedTiers[tierIndex].second
+        val tierEnd = if (tierIndex + 1 < sortedTiers.size) sortedTiers[tierIndex + 1].first else tierStart + 2f
 
         val hoursIntoTier = safeHours - tierStart
         val hoursIntoCurrentBlock = safeHours % HOURS_PER_LEVEL

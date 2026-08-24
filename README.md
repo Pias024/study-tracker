@@ -4,6 +4,26 @@ Native Android app (Kotlin + Jetpack Compose + Room) — log daily study hours,
 see them on a calendar, track a lifetime average, and get a daily rank that
 levels up every 0.5h studied that day.
 
+## Round 1 changes (this update)
+- Dark HUD theme with slow-drifting glowing teal/green blobs in the background
+- Rank tiers are now user-editable in Settings (add/edit/delete). They're
+  always evaluated sorted by hours ascending — to "reorder" a tier, just
+  change its hour value. "Reset to default" restores the original ladder.
+- Calendar heatmap now scales green intensity from 0h (no fill) to 10h+
+  (brightest)
+- Animated splash quote on every open
+- First-launch name prompt; name shows in the top bar, editable later in
+  Settings
+- Backup: Export/Import as a JSON file (Settings) — the one thing that
+  protects your data if you ever uninstall the app
+- Delete a past entry directly from the entry card when a date already has
+  logged hours
+
+**Note on your existing data:** the database schema changed (added a table
+for rank tiers), so this update ships a migration rather than wiping your
+`study_tracker.db` — your previously logged hours should carry over. Still,
+this is a good moment to try Export once the update installs, just in case.
+
 ## How data is stored
 All entries live in a local Room (SQLite) database on the device —
 `study_tracker.db`. Nothing leaves the phone; no internet permission is
