@@ -1,13 +1,14 @@
 package com.pias.studytracker
 
+import android.Manifest
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,8 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -39,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.pias.studytracker.ui.CalendarView
+import com.pias.studytracker.ui.CelebrationDialog
 import com.pias.studytracker.ui.GlassCard
 import com.pias.studytracker.ui.GlowingBlobBackground
 import com.pias.studytracker.ui.NameEntryScreen
@@ -59,7 +61,9 @@ import com.pias.studytracker.ui.SettingsScreen
 import com.pias.studytracker.ui.SplashScreen
 import com.pias.studytracker.ui.StudyTrackerTheme
 import com.pias.studytracker.ui.StudyViewModel
+import com.pias.studytracker.ui.TrendChart
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
@@ -86,8 +90,19 @@ private fun RootNavigation(viewModel: StudyViewModel) {
     var screen by remember { mutableStateOf(Screen.SPLASH) }
     val userName by viewModel.userName.collectAsState()
     val scope = rememberCoroutineScope()
-
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Ask for notification permission once, up front, on API 33+ (harmless no-op below that).
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { /* result ignored: reminder simply won't show if denied */ }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri: Uri? ->
@@ -127,16 +142,20 @@ private fun RootNavigation(viewModel: StudyViewModel) {
 
         Screen.SETTINGS -> {
             val tiers by viewModel.rankTiers.collectAsState()
+            val reminderTime by viewModel.reminderTime.collectAsState()
             SettingsScreen(
                 currentName = userName ?: "",
                 rankTiers = tiers,
+                reminderTime = reminderTime,
                 onBack = { screen = Screen.MAIN },
                 onNameChange = { viewModel.setUserName(it) },
                 onTierUpsert = { viewModel.upsertRankTier(it) },
                 onTierDelete = { viewModel.deleteRankTier(it) },
                 onResetTiers = { viewModel.resetRankTiersToDefault() },
                 onExport = { exportLauncher.launch("study-tracker-backup.json") },
-                onImport = { importLauncher.launch(arrayOf("application/json")) }
+                onImport = { importLauncher.launch(arrayOf("application/json")) },
+                onSetReminder = { h, m -> viewModel.setReminder(h, m) },
+                onClearReminder = { viewModel.clearReminder() }
             )
         }
     }
@@ -151,6 +170,14 @@ fun StudyTrackerApp(viewModel: StudyViewModel, userName: String, onOpenSettings:
     val selectedDate by viewModel.selectedDate.collectAsState()
     val visibleMonth by viewModel.visibleMonth.collectAsState()
     val dailyRank by viewModel.selectedDayRank.collectAsState()
+    val streaks by viewModel.streaks.collectAsState()
+    val weeklySummary by viewModel.weeklySummary.collectAsState()
+    val trendSeries by viewModel.trendSeries.collectAsState()
+    val trendDays by viewModel.trendDays.collectAsState()
+    val celebration by viewModel.celebration.collectAsState()
+
+    val today = LocalDate.now()
+    val isFutureSelected = selectedDate.isAfter(today)
 
     var hoursInput by remember(selectedDate, hoursByDate) {
         mutableStateOf((hoursByDate[selectedDate] ?: 0f).let {
@@ -158,6 +185,10 @@ fun StudyTrackerApp(viewModel: StudyViewModel, userName: String, onOpenSettings:
         })
     }
     val hasExistingEntry = (hoursByDate[selectedDate] ?: 0f) > 0f
+
+    celebration?.let { event ->
+        CelebrationDialog(event = event, onDismiss = { viewModel.consumeCelebration() })
+    }
 
     Scaffold(topBar = {
         TopAppBar(
@@ -210,6 +241,76 @@ fun StudyTrackerApp(viewModel: StudyViewModel, userName: String, onOpenSettings:
 
                 Spacer(Modifier.height(16.dp))
 
+                // ---- Streaks ----
+                GlassCard {
+                    Row(
+                        Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("${streaks.current}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                            Text("Current streak", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("${streaks.longest}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                            Text("Longest streak", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // ---- Weekly summary ----
+                GlassCard {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("This Week", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            "This week: %.1fh   \u00b7   Last week: %.1fh".format(
+                                weeklySummary.thisWeekTotal, weeklySummary.lastWeekTotal
+                            ),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        if (weeklySummary.bestDay != null) {
+                            Text(
+                                "Best day: ${weeklySummary.bestDay} (%.1fh)".format(weeklySummary.bestDayHours),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // ---- Trend chart ----
+                GlassCard {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Trend", style = MaterialTheme.typography.labelLarge)
+                            Row {
+                                FilterChip(
+                                    selected = trendDays == 7,
+                                    onClick = { viewModel.setTrendDays(7) },
+                                    label = { Text("7d") }
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                FilterChip(
+                                    selected = trendDays == 30,
+                                    onClick = { viewModel.setTrendDays(30) },
+                                    label = { Text("30d") }
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        TrendChart(series = trendSeries, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
                 // ---- Entry form ----
                 GlassCard {
                     Column(Modifier.padding(16.dp)) {
@@ -219,22 +320,36 @@ fun StudyTrackerApp(viewModel: StudyViewModel, userName: String, onOpenSettings:
                             ),
                             style = MaterialTheme.typography.titleMedium
                         )
+                        if (isFutureSelected) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "You can't log hours for a future date.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                         Spacer(Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
                                 value = hoursInput,
                                 onValueChange = { hoursInput = it },
                                 label = { Text("Hours studied") },
+                                enabled = !isFutureSelected,
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                                     keyboardType = KeyboardType.Decimal
                                 ),
                                 modifier = Modifier.weight(1f)
                             )
                             Spacer(Modifier.width(12.dp))
-                            Button(onClick = {
-                                val value = hoursInput.toFloatOrNull() ?: 0f
-                                viewModel.saveHours(selectedDate, value)
-                            }) {
+                            Button(
+                                enabled = !isFutureSelected,
+                                onClick = {
+                                    if (!isFutureSelected) {
+                                        val value = hoursInput.toFloatOrNull() ?: 0f
+                                        viewModel.saveHours(selectedDate, value)
+                                    }
+                                }
+                            ) {
                                 Text("Save")
                             }
                         }

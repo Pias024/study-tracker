@@ -6,9 +6,13 @@ import androidx.lifecycle.viewModelScope
 import com.pias.studytracker.data.RankInfo
 import com.pias.studytracker.data.RankSystem
 import com.pias.studytracker.data.RankTier
+import com.pias.studytracker.data.StatsCalculators
+import com.pias.studytracker.data.StreakInfo
 import com.pias.studytracker.data.StudyDatabase
 import com.pias.studytracker.data.StudyRepository
 import com.pias.studytracker.data.UserPreferences
+import com.pias.studytracker.data.WeeklySummary
+import com.pias.studytracker.reminder.ReminderScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -86,7 +90,27 @@ class StudyViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { userPreferences.setUserName(name) }
     }
 
-    // ---------- Calendar navigation / entry editing ----------
+    // ---------- Streaks / weekly summary / trend ----------
+
+    val streaks: StateFlow<StreakInfo> =
+        hoursByDate.map { StatsCalculators.streaks(it) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StreakInfo(0, 0))
+
+    val weeklySummary: StateFlow<WeeklySummary> =
+        hoursByDate.map { StatsCalculators.weeklySummary(it) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WeeklySummary(0f, 0f, null, 0f))
+
+    val trendDays = MutableStateFlow(7)
+
+    val trendSeries: StateFlow<List<Pair<LocalDate, Float>>> =
+        combine(hoursByDate, trendDays) { map, days -> StatsCalculators.trendSeries(map, days) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun setTrendDays(days: Int) {
+        trendDays.value = days
+    }
+
+    // ---------- Calendar navigation ----------
 
     fun selectDate(date: LocalDate) {
         selectedDate.value = date
@@ -96,8 +120,39 @@ class StudyViewModel(application: Application) : AndroidViewModel(application) {
         visibleMonth.value = visibleMonth.value.plusMonths(delta)
     }
 
+    // ---------- Entry save/delete, with celebration triggers ----------
+
+    private val _celebration = MutableStateFlow<CelebrationEvent?>(null)
+    val celebration: StateFlow<CelebrationEvent?> = _celebration
+
+    fun consumeCelebration() {
+        _celebration.value = null
+    }
+
     fun saveHours(date: LocalDate, hours: Float) {
-        viewModelScope.launch { repository.saveHours(date, hours) }
+        viewModelScope.launch {
+            val tiers = tierPairs(rankTiers.value).ifEmpty { RankSystem.DEFAULT_TIERS }
+            val prevTotal = hoursByDate.value.values.sum()
+            val prevForDate = hoursByDate.value[date] ?: 0f
+            val newTotal = prevTotal - prevForDate + hours
+
+            repository.saveHours(date, hours)
+
+            // Milestone takes priority if both would fire in the same save.
+            val milestone = StatsCalculators.crossedMilestone(prevTotal, newTotal)
+            if (milestone != null) {
+                _celebration.value = CelebrationEvent.Milestone(milestone)
+                return@launch
+            }
+
+            if (date == LocalDate.now()) {
+                val prevRank = RankSystem.rankFor(prevForDate, tiers)
+                val newRank = RankSystem.rankFor(hours, tiers)
+                if (newRank.tierName != prevRank.tierName && hours > 0f) {
+                    _celebration.value = CelebrationEvent.DailyRankUp(newRank.tierName)
+                }
+            }
+        }
     }
 
     fun deleteEntry(date: LocalDate) {
@@ -111,5 +166,25 @@ class StudyViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun importBackupJson(json: String) {
         val restoredName = repository.importBackupJson(json)
         if (restoredName != null) userPreferences.setUserName(restoredName)
+    }
+
+    // ---------- Reminder ----------
+
+    val reminderTime: StateFlow<Pair<Int, Int>?> =
+        userPreferences.reminderTime
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun setReminder(hour: Int, minute: Int) {
+        viewModelScope.launch {
+            userPreferences.setReminderTime(hour, minute)
+            ReminderScheduler.schedule(getApplication(), hour, minute)
+        }
+    }
+
+    fun clearReminder() {
+        viewModelScope.launch {
+            userPreferences.clearReminderTime()
+            ReminderScheduler.cancel(getApplication())
+        }
     }
 }

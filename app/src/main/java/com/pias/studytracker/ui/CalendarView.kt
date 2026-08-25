@@ -1,6 +1,7 @@
 package com.pias.studytracker.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +39,11 @@ fun CalendarView(
     onSelectDate: (LocalDate) -> Unit,
     onChangeMonth: (Long) -> Unit
 ) {
+    val monthTotal = hoursByDate.entries
+        .filter { YearMonth.from(it.key) == month }
+        .sumOf { it.value.toDouble() }
+        .toFloat()
+
     Column(Modifier.fillMaxWidth().padding(8.dp)) {
         Row(
             Modifier.fillMaxWidth(),
@@ -47,10 +53,16 @@ fun CalendarView(
             IconButton(onClick = { onChangeMonth(-1) }) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "Previous month")
             }
-            Text(
-                text = "${month.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${month.year}",
-                style = MaterialTheme.typography.titleMedium
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "${month.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${month.year}",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = "Total this month: %.1fh".format(monthTotal),
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
             IconButton(onClick = { onChangeMonth(1) }) {
                 Icon(Icons.Default.ArrowForward, contentDescription = "Next month")
             }
@@ -111,6 +123,8 @@ private fun DayCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isFuture = date.isAfter(LocalDate.now())
+
     // 0h = no fill, 10h+ = brightest green. Capped at 10h so nothing overshoots the scale.
     val intensity = (hours / 10f).coerceIn(0f, 1f)
     val green = com.pias.studytracker.ui.NeonGreen
@@ -133,17 +147,21 @@ private fun DayCell(
             .background(bgColor)
             .then(
                 if (borderColor != Color.Transparent)
-                    Modifier.background(Color.Transparent)
+                    Modifier.border(1.5.dp, borderColor, RoundedCornerShape(8.dp))
                 else Modifier
             )
-            .clickable { onClick() },
+            .clickable(enabled = !isFuture) { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = date.dayOfMonth.toString(),
                 style = MaterialTheme.typography.bodySmall,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                color = when {
+                    isFuture -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
+                    isSelected -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurface
+                }
             )
             if (hours > 0f) {
                 Text(

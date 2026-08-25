@@ -29,6 +29,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.platform.LocalContext
+import android.app.TimePickerDialog
+import java.util.Calendar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,13 +50,16 @@ import com.pias.studytracker.data.RankTier
 fun SettingsScreen(
     currentName: String,
     rankTiers: List<RankTier>,
+    reminderTime: Pair<Int, Int>?,
     onBack: () -> Unit,
     onNameChange: (String) -> Unit,
     onTierUpsert: (RankTier) -> Unit,
     onTierDelete: (RankTier) -> Unit,
     onResetTiers: () -> Unit,
     onExport: () -> Unit,
-    onImport: () -> Unit
+    onImport: () -> Unit,
+    onSetReminder: (Int, Int) -> Unit,
+    onClearReminder: () -> Unit
 ) {
     var nameField by remember(currentName) { mutableStateOf(currentName) }
 
@@ -154,6 +160,55 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            Spacer(Modifier.height(16.dp))
+
+            // ---- Daily reminder ----
+            val context = LocalContext.current
+            GlassCard {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Daily reminder", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        if (reminderTime != null)
+                            "Reminds you at %02d:%02d if today isn't logged yet".format(reminderTime.first, reminderTime.second)
+                        else
+                            "No reminder set",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row {
+                        Button(
+                            onClick = {
+                                val now = Calendar.getInstance()
+                                val initialHour = reminderTime?.first ?: now.get(Calendar.HOUR_OF_DAY)
+                                val initialMinute = reminderTime?.second ?: now.get(Calendar.MINUTE)
+                                TimePickerDialog(
+                                    context,
+                                    { _, hour, minute -> onSetReminder(hour, minute) },
+                                    initialHour, initialMinute, true
+                                ).show()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Set time") }
+                        if (reminderTime != null) {
+                            Spacer(Modifier.width(12.dp))
+                            OutlinedButton(onClick = onClearReminder, modifier = Modifier.weight(1f)) {
+                                Text("Turn off")
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "Built by Md. Samiul Islam Pias, CSE, Netrokona University",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(Modifier.height(16.dp))
         }
     }
 }

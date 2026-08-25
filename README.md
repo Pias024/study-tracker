@@ -4,7 +4,24 @@ Native Android app (Kotlin + Jetpack Compose + Room) — log daily study hours,
 see them on a calendar, track a lifetime average, and get a daily rank that
 levels up every 0.5h studied that day.
 
-## Round 1 changes (this update)
+## Round 2 changes (this update)
+- Future dates are locked on the calendar (greyed out, untappable) and the Save button rejects them too
+- "Built by Md. Samiul Islam Pias, CSE, Netrokona University" footer in Settings
+- Daily rank-up popup fires the instant today's hours cross into a new tier
+- Lifetime milestone popup every 50 total hours (50, 100, 150, ...)
+- Daily reminder notification at a time you set in Settings, skipped automatically if today's already logged. Requires the notification permission prompt on Android 13+ (asked once, on first open after this update).
+- Weekly summary card: this week vs. last week, best day this week
+- Trend chart: 7-day / 30-day toggle bar graph
+- Monthly total shown next to the month name on the calendar
+- Current + longest streak card (a day counts if hours > 0)
+
+**Note on reminders surviving reboot:** the app registers a boot receiver to
+re-arm your daily reminder after the phone restarts, so you shouldn't need to
+re-set it. The reminder itself is "inexact" (Android may fire it a few
+minutes off schedule to save battery) — deliberate trade-off to avoid asking
+for the more sensitive exact-alarm permission for a non-critical nudge.
+
+## Round 1 changes
 - Dark HUD theme with slow-drifting glowing teal/green blobs in the background
 - Rank tiers are now user-editable in Settings (add/edit/delete). They're
   always evaluated sorted by hours ascending — to "reorder" a tier, just
