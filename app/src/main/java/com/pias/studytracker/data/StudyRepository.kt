@@ -105,7 +105,7 @@ class StudyRepository(
 
         // Wipe existing data first so import is a clean replace, not a merge.
         for (existing in dao.getAll().first()) {
-            dao.delete(LocalDate.parse(existing.date, formatter))
+            dao.delete(existing.date)
         }
         rankTierDao.clearAll()
 

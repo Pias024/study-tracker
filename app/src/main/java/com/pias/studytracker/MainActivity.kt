@@ -142,6 +142,7 @@ private fun RootNavigation(viewModel: StudyViewModel) {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun StudyTrackerApp(viewModel: StudyViewModel, userName: String, onOpenSettings: () -> Unit) {
     val hoursByDate by viewModel.hoursByDate.collectAsState()
